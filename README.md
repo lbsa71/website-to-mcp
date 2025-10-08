@@ -12,6 +12,18 @@ A turnkey Dockerized service that crawls documentation websites, extracts semant
 - **MCP Compatible**: Ready-to-use as an MCP data source for LLMs
 - **Fully Dockerized**: One command to spin up the entire service
 
+## 📚 Documentation
+
+This project includes comprehensive documentation to help you get started and customize the service:
+
+- **[README.md](README.md)** - Main documentation with quick start guide
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Detailed system architecture and component design
+- **[USAGE.md](USAGE.md)** - Comprehensive usage guide with examples
+- **[EXAMPLES.md](EXAMPLES.md)** - Code examples and query patterns
+- **[DIAGRAM.md](DIAGRAM.md)** - Visual system diagrams and data flow
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** - Development and contribution guidelines
+- **[PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)** - Complete project overview and deliverables
+
 ## 📋 Prerequisites
 
 - Docker and Docker Compose
