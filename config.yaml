@@ -1,0 +1,37 @@
+# Configuration for Website RAG MCP Service
+
+# Website to crawl
+website:
+  url: "https://docs.sine.space/scripting/"
+  max_pages: 100
+  follow_external_links: false
+
+# Chunking settings
+chunking:
+  min_chunk_size: 200
+  max_chunk_size: 500
+  overlap: 50
+
+# Embedding settings
+embedding:
+  model: "sentence-transformers/all-MiniLM-L6-v2"
+  device: "cpu"
+
+# Vector store settings
+vector_store:
+  host: "qdrant"
+  port: 6333
+  collection_name: "website_docs"
+  vector_size: 384
+
+# API settings
+api:
+  host: "0.0.0.0"
+  port: 8000
+  top_k: 5
+
+# Crawler settings
+crawler:
+  timeout: 30
+  max_retries: 3
+  delay_between_requests: 1

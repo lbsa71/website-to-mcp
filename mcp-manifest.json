@@ -1,0 +1,96 @@
+{
+  "manifest_version": "1.0",
+  "service": {
+    "name": "Website RAG MCP Service",
+    "description": "Semantic search over documentation websites using vector embeddings and RAG",
+    "version": "1.0.0",
+    "author": "website-to-mcp",
+    "license": "MIT"
+  },
+  "endpoints": {
+    "query": {
+      "path": "/query",
+      "method": "POST",
+      "description": "Retrieve semantically relevant text chunks for a given query",
+      "request": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "The search query text",
+            "required": true
+          },
+          "top_k": {
+            "type": "integer",
+            "description": "Number of results to return (default: 5)",
+            "required": false,
+            "default": 5
+          }
+        }
+      },
+      "response": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "description": "Array of relevant text chunks",
+            "items": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "description": "The text content of the chunk"
+                },
+                "source_url": {
+                  "type": "string",
+                  "description": "URL of the original page"
+                },
+                "title": {
+                  "type": "string",
+                  "description": "Section title or header"
+                },
+                "score": {
+                  "type": "number",
+                  "description": "Similarity score (0-1)"
+                }
+              }
+            }
+          },
+          "query": {
+            "type": "string",
+            "description": "The original query"
+          },
+          "count": {
+            "type": "integer",
+            "description": "Number of results returned"
+          }
+        }
+      }
+    },
+    "health": {
+      "path": "/health",
+      "method": "GET",
+      "description": "Health check endpoint"
+    },
+    "stats": {
+      "path": "/stats",
+      "method": "GET",
+      "description": "Get service statistics including number of indexed documents"
+    }
+  },
+  "configuration": {
+    "base_url": "http://localhost:8000",
+    "timeout": 30,
+    "retries": 3
+  },
+  "data_source": {
+    "type": "vector_search",
+    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "vector_store": "Qdrant",
+    "capabilities": [
+      "semantic_search",
+      "context_retrieval",
+      "multi_document_search"
+    ]
+  }
+}
