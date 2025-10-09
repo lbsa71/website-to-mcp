@@ -1,6 +1,6 @@
 # Website RAG MCP Service
 
-A turnkey Dockerized service that crawls documentation websites, extracts semantic content, stores vector embeddings, and exposes a REST API for retrieval-augmented generation (RAG). Perfect for LLM-powered documentation search and MCP data sources.
+A turnkey Dockerized service that crawls documentation websites, extracts semantic content, stores vector embeddings, and exposes an MCP (Model Context Protocol) server for retrieval-augmented generation (RAG). Perfect for integrating documentation search with MCP-compatible LLM clients like Claude Desktop.
 
 ## 🚀 Features
 
@@ -8,8 +8,9 @@ A turnkey Dockerized service that crawls documentation websites, extracts semant
 - **Smart Chunking**: Splits content into meaningful chunks while preserving context
 - **Vector Embeddings**: Uses sentence-transformers for local, cost-free embeddings
 - **Semantic Search**: Powered by Qdrant vector database for fast similarity search
-- **REST API**: FastAPI-based endpoint for querying relevant content
-- **MCP Compatible**: Ready-to-use as an MCP data source for LLMs
+- **MCP Protocol**: Full Model Context Protocol implementation with JSON-RPC 2.0 over stdio
+- **MCP Tools**: Semantic search exposed as MCP tool for LLM agents
+- **MCP Resources**: Documentation metadata accessible as MCP resources
 - **Fully Dockerized**: One command to spin up the entire service
 
 ## 📚 Documentation
@@ -53,7 +54,7 @@ website:
 ### 3. Start the Services
 
 ```bash
-# Start Qdrant vector database and API server
+# Start Qdrant vector database and MCP server
 docker compose up -d
 
 # Wait for services to be ready (about 30 seconds)
@@ -74,31 +75,52 @@ This may take several minutes depending on the size of the website. You'll see p
 - Embeddings being generated
 - Data being stored in Qdrant
 
-### 5. Query the API
+### 5. Use with MCP Client
 
-Once ingestion is complete, you can query the API:
+The server uses the Model Context Protocol and communicates via stdio. Configure your MCP client using the provided configuration:
 
-```bash
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "How do I create a function?", "top_k": 5}'
-```
-
-Example response:
+**For Claude Desktop**, add to your config file (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 
 ```json
 {
-  "results": [
-    {
-      "text": "To create a function in Lua, use the function keyword...",
-      "source_url": "https://docs.sine.space/scripting/functions",
-      "title": "Functions > Creating Functions",
-      "score": 0.87
+  "mcpServers": {
+    "website-rag": {
+      "command": "docker",
+      "args": ["compose", "run", "--rm", "mcp-server"],
+      "env": {
+        "CONFIG_PATH": "/app/config.yaml"
+      }
     }
-  ],
-  "query": "How do I create a function?",
-  "count": 5
+  }
 }
+```
+
+**For other MCP clients**, use the configuration in `mcp-client-config.json`.
+
+The server provides:
+- **Tool**: `semantic_search` - Search documentation using semantic similarity
+- **Resources**: 
+  - `website://docs/metadata` - Documentation metadata
+  - `website://docs/stats` - Collection statistics
+
+Example using MCP client:
+
+```python
+# Using an MCP client library
+from mcp import Client
+
+async with Client("website-rag") as client:
+    # List available tools
+    tools = await client.list_tools()
+    
+    # Call semantic_search tool
+    result = await client.call_tool(
+        "semantic_search",
+        arguments={"query": "How do I create a function?", "top_k": 5}
+    )
+    
+    print(result)
+```
 ```
 
 ## 🔧 Configuration
@@ -130,11 +152,13 @@ vector_store:
   collection_name: "website_docs"
   vector_size: 384            # Must match embedding model dimension
 
-# API settings
-api:
-  host: "0.0.0.0"
-  port: 8000
-  top_k: 5                    # Default number of results
+# MCP server settings
+mcp:
+  server_name: "website-rag-mcp"
+  capabilities:
+    tools: true               # Enable tool support
+    resources: true           # Enable resource support
+    prompts: false            # Prompts not implemented
 
 # Crawler settings
 crawler:
@@ -165,23 +189,24 @@ embedding:
 
 **Note**: If you change the model, update `vector_size` to match the model's dimension.
 
-## 📡 API Endpoints
+## 🔌 MCP Integration
 
-### POST `/query`
+This service implements the Model Context Protocol, allowing it to be used as a tool provider for MCP-compatible clients.
 
-Search for semantically relevant content.
+### Available MCP Tools
 
-**Request:**
+#### `semantic_search`
+
+Search documentation using semantic similarity.
+
+**Parameters:**
+- `query` (string, required): The search query text
+- `top_k` (integer, optional): Number of results to return (default: 5, max: 20)
+
+**Returns:**
 ```json
 {
   "query": "your search query",
-  "top_k": 5  // optional
-}
-```
-
-**Response:**
-```json
-{
   "results": [
     {
       "text": "Content chunk...",
@@ -190,64 +215,23 @@ Search for semantically relevant content.
       "score": 0.85
     }
   ],
-  "query": "your search query",
   "count": 5
 }
 ```
 
-### GET `/health`
+### Available MCP Resources
 
-Check service health.
+#### `website://docs/metadata`
 
-**Response:**
-```json
-{
-  "status": "healthy",
-  "vector_store": "connected",
-  "documents_indexed": 1234
-}
-```
+Get metadata about the indexed documentation.
 
-### GET `/stats`
+**Returns:** JSON containing total chunks, website URL, last update time, embedding model info, etc.
 
-Get service statistics.
+#### `website://docs/stats`
 
-**Response:**
-```json
-{
-  "documents_indexed": 1234,
-  "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
-  "embedding_dimension": 384,
-  "collection_name": "website_docs"
-}
-```
+Get statistics about the documentation collection.
 
-### GET `/`
-
-Service information and available endpoints.
-
-## 🔌 MCP Integration
-
-The service is MCP-compatible and can be used as a data source for LLMs. See `mcp-manifest.json` for the complete manifest.
-
-### Using as an MCP Data Source
-
-1. Point your MCP client to `http://localhost:8000`
-2. Use the `/query` endpoint for retrieval
-3. The manifest at `mcp-manifest.json` describes the service capabilities
-
-Example integration with an LLM:
-
-```python
-import requests
-
-def get_relevant_context(query: str) -> str:
-    """Fetch relevant documentation for a query."""
-    response = requests.post(
-        "http://localhost:8000/query",
-        json={"query": query, "top_k": 3}
-    )
-    results = response.json()["results"]
+**Returns:** JSON containing documents indexed, embedding model details, and vector store configuration.
     
     # Combine results into context
     context = "\n\n".join([
@@ -291,7 +275,7 @@ prompt = f"Context:\n{context}\n\nQuestion: {user_query}\nAnswer:"
        │
        ▼
 ┌─────────────┐
-│  FastAPI    │ Expose REST endpoint
+│ MCP Server  │ Expose tools/resources via JSON-RPC 2.0
 └─────────────┘
 ```
 
@@ -378,7 +362,7 @@ netstat -tuln | grep -E '6333|8000'
 ### Query returns no results
 
 - Ensure ingestion completed successfully
-- Check document count: `curl http://localhost:8000/stats`
+- Check document count using MCP resources
 - Try different queries or increase `top_k`
 
 ### Out of memory errors
@@ -410,12 +394,13 @@ Contributions welcome! Please feel free to submit a Pull Request.
 | Chunking | Custom Python logic |
 | Embeddings | sentence-transformers (local) |
 | Vector Store | Qdrant |
-| API Server | FastAPI |
+| MCP Server | MCP Python SDK |
+| Protocol | JSON-RPC 2.0 over stdio |
 | Orchestration | Docker Compose |
 
 ## 🔗 Related Projects
 
 - [Qdrant](https://qdrant.tech/) - Vector database
 - [sentence-transformers](https://www.sbert.net/) - Embedding models
-- [FastAPI](https://fastapi.tiangolo.com/) - API framework
 - [MCP](https://modelcontextprotocol.io) - Model Context Protocol
+- [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) - MCP server implementation
