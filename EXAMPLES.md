@@ -1,77 +1,140 @@
 # Example Queries for Website RAG MCP Service
 
-This file contains example queries you can use to test the service.
+This file contains example queries you can use to test the MCP service.
 
-## Using curl
+## Using MCP Python Client
 
 ### Basic Query
-```bash
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "How do I get started?"}'
+
+```python
+from mcp import Client
+import asyncio
+
+async def basic_search():
+    async with Client("website-rag") as client:
+        result = await client.call_tool(
+            "semantic_search",
+            arguments={"query": "How do I get started?"}
+        )
+        
+        print(f"Found {result['count']} results:")
+        for i, item in enumerate(result['results'], 1):
+            print(f"\n{i}. {item['title']}")
+            print(f"   URL: {item['source_url']}")
+            print(f"   Score: {item['score']:.3f}")
+            print(f"   Text: {item['text'][:200]}...")
+
+asyncio.run(basic_search())
 ```
 
 ### Query with Custom top_k
-```bash
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "What are the best practices?", "top_k": 10}'
+
+```python
+from mcp import Client
+import asyncio
+
+async def custom_topk_search():
+    async with Client("website-rag") as client:
+        result = await client.call_tool(
+            "semantic_search",
+            arguments={
+                "query": "What are the best practices?",
+                "top_k": 10
+            }
+        )
+        
+        print(f"Found {result['count']} results")
+        return result
+
+asyncio.run(custom_topk_search())
 ```
 
 ### Code-Related Query
-```bash
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "Show me an example of a function"}'
-```
-
-## Using Python
 
 ```python
-import requests
+from mcp import Client
+import asyncio
 
-def query_rag_service(query: str, top_k: int = 5):
-    """Query the RAG service."""
-    response = requests.post(
-        "http://localhost:8000/query",
-        json={"query": query, "top_k": top_k}
-    )
-    return response.json()
+async def code_search():
+    async with Client("website-rag") as client:
+        result = await client.call_tool(
+            "semantic_search",
+            arguments={"query": "Show me an example of a function"}
+        )
+        
+        for item in result['results']:
+            print(f"\n{item['title']}")
+            print(f"{item['text']}\n")
 
-# Example usage
-results = query_rag_service("How do I initialize a project?")
-print(f"Found {results['count']} results:")
-for i, result in enumerate(results['results'], 1):
-    print(f"\n{i}. {result['title']}")
-    print(f"   URL: {result['source_url']}")
-    print(f"   Score: {result['score']:.3f}")
-    print(f"   Text: {result['text'][:200]}...")
+asyncio.run(code_search())
 ```
 
-## Using JavaScript/Node.js
+### List Available Tools
 
-```javascript
-async function queryRAGService(query, topK = 5) {
-    const response = await fetch('http://localhost:8000/query', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ query, top_k: topK })
-    });
-    return await response.json();
-}
+```python
+from mcp import Client
+import asyncio
 
-// Example usage
-queryRAGService('How do I create a function?')
-    .then(results => {
-        console.log(`Found ${results.count} results:`);
-        results.results.forEach((result, i) => {
-            console.log(`\n${i + 1}. ${result.title}`);
-            console.log(`   Score: ${result.score.toFixed(3)}`);
-            console.log(`   Text: ${result.text.substring(0, 200)}...`);
-        });
-    });
+async def list_tools():
+    async with Client("website-rag") as client:
+        tools = await client.list_tools()
+        
+        print("Available tools:")
+        for tool in tools:
+            print(f"  - {tool.name}: {tool.description}")
+            print(f"    Parameters: {tool.inputSchema}")
+
+asyncio.run(list_tools())
+```
+
+### Access Resources
+
+```python
+from mcp import Client
+import asyncio
+import json
+
+async def get_metadata():
+    async with Client("website-rag") as client:
+        # List all resources
+        resources = await client.list_resources()
+        print("Available resources:")
+        for resource in resources:
+            print(f"  - {resource.uri}: {resource.description}")
+        
+        # Read metadata
+        metadata = await client.read_resource("website://docs/metadata")
+        print("\nMetadata:")
+        print(json.dumps(json.loads(metadata), indent=2))
+        
+        # Read stats
+        stats = await client.read_resource("website://docs/stats")
+        print("\nStats:")
+        print(json.dumps(json.loads(stats), indent=2))
+
+asyncio.run(get_metadata())
+```
+
+## Using MCP with JSON-RPC 2.0 (Direct stdio)
+
+For testing or custom integrations, you can interact directly with the JSON-RPC protocol:
+
+### Initialize Connection
+
+```bash
+echo '{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "test", "version": "1.0.0"}}}' | python -m app.mcp_server
+```
+
+### List Tools
+
+```bash
+echo '{"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}' | python -m app.mcp_server
+```
+
+### Call Tool
+
+```bash
+echo '{"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "semantic_search", "arguments": {"query": "How do I get started?", "top_k": 5}}}' | python -m app.mcp_server
 ```
 
 ## Example Queries by Domain
@@ -115,26 +178,75 @@ queryRAGService('How do I create a function?')
 ## Testing Different Scenarios
 
 ### Test semantic understanding
-```bash
-# These should return similar results
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "How do I start?"}'
 
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "What are the first steps?"}'
+```python
+from mcp import Client
+import asyncio
+
+async def test_semantic_understanding():
+    async with Client("website-rag") as client:
+        # These should return similar results
+        result1 = await client.call_tool(
+            "semantic_search",
+            arguments={"query": "How do I start?"}
+        )
+        
+        result2 = await client.call_tool(
+            "semantic_search",
+            arguments={"query": "What are the first steps?"}
+        )
+        
+        print("Query 1 results:", len(result1['results']))
+        print("Query 2 results:", len(result2['results']))
+
+asyncio.run(test_semantic_understanding())
 ```
 
 ### Test code search
-```bash
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "function declaration example"}'
+
+```python
+from mcp import Client
+import asyncio
+
+async def test_code_search():
+    async with Client("website-rag") as client:
+        result = await client.call_tool(
+            "semantic_search",
+            arguments={"query": "function declaration example", "top_k": 5}
+        )
+        
+        for item in result['results']:
+            if 'code' in item.get('type', '').lower() or '```' in item['text']:
+                print(f"Found code example: {item['title']}")
+                print(item['text'][:300])
+
+asyncio.run(test_code_search())
 ```
 
 ### Test context retrieval
-```bash
+
+```python
+from mcp import Client
+import asyncio
+
+async def test_context_retrieval():
+    async with Client("website-rag") as client:
+        result = await client.call_tool(
+            "semantic_search",
+            arguments={"query": "step by step tutorial", "top_k": 10}
+        )
+        
+        # Combine results to build comprehensive context
+        context = "\n\n".join([
+            f"{item['title']}: {item['text']}"
+            for item in result['results'][:3]
+        ])
+        
+        print("Combined context:")
+        print(context)
+
+asyncio.run(test_context_retrieval())
+```
 curl -X POST http://localhost:8000/query \
   -H "Content-Type: application/json" \
   -d '{"query": "error handling and debugging", "top_k": 8}'
