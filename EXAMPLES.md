@@ -247,7 +247,3 @@ async def test_context_retrieval():
 
 asyncio.run(test_context_retrieval())
 ```
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "error handling and debugging", "top_k": 8}'
-```
