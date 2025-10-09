@@ -6,7 +6,7 @@ This guide provides detailed instructions for using the Website RAG MCP Service.
 1. [Installation](#installation)
 2. [Configuration](#configuration)
 3. [Running the Service](#running-the-service)
-4. [Querying the API](#querying-the-api)
+4. [Using with MCP Clients](#using-with-mcp-clients)
 5. [Integration Examples](#integration-examples)
 6. [Troubleshooting](#troubleshooting)
 
@@ -168,115 +168,176 @@ docker run -p 6333:6333 qdrant/qdrant
 # Run ingestion
 python app/ingest.py
 
-# Start API
-uvicorn app.api.main:app --reload
+# Start MCP server
+python -m app.mcp_server
 ```
 
-## Querying the API
+## Using with MCP Clients
 
-### Using curl
+The service implements the Model Context Protocol and communicates via stdio using JSON-RPC 2.0.
 
-#### Basic Query
+### Claude Desktop Integration
 
-```bash
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "How do I get started?"}'
+Add to your Claude Desktop configuration file:
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "website-rag": {
+      "command": "docker",
+      "args": ["compose", "run", "--rm", "mcp-server"],
+      "env": {
+        "CONFIG_PATH": "/app/config.yaml"
+      }
+    }
+  }
+}
 ```
 
-#### Custom Number of Results
+Restart Claude Desktop. The server will appear in the MCP section with available tools.
 
-```bash
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "installation steps", "top_k": 10}'
-```
-
-#### Pretty Print Response
-
-```bash
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "API documentation"}' | python -m json.tool
-```
-
-### Using Python
+### Using MCP Python Client
 
 ```python
-import requests
+from mcp import Client
+import asyncio
 
-def search_docs(query: str, top_k: int = 5):
-    """Search documentation."""
-    response = requests.post(
-        "http://localhost:8000/query",
-        json={"query": query, "top_k": top_k}
-    )
-    return response.json()
+async def search_documentation():
+    # Connect to the MCP server
+    async with Client("website-rag") as client:
+        # List available tools
+        tools = await client.list_tools()
+        print(f"Available tools: {[t.name for t in tools]}")
+        
+        # Call semantic_search tool
+        result = await client.call_tool(
+            "semantic_search",
+            arguments={
+                "query": "How do I configure authentication?",
+                "top_k": 5
+            }
+        )
+        
+        # Process results
+        for i, item in enumerate(result['results'], 1):
+            print(f"{i}. {item['title']}")
+            print(f"   URL: {item['source_url']}")
+            print(f"   Score: {item['score']:.3f}")
+            print(f"   Preview: {item['text'][:150]}...")
+            print()
 
-# Search
-results = search_docs("How do I configure authentication?")
-
-# Process results
-for i, result in enumerate(results['results'], 1):
-    print(f"{i}. {result['title']}")
-    print(f"   URL: {result['source_url']}")
-    print(f"   Score: {result['score']:.3f}")
-    print(f"   Preview: {result['text'][:150]}...")
-    print()
+asyncio.run(search_documentation())
 ```
 
-### Using JavaScript
+### Available MCP Tools
 
-```javascript
-async function searchDocs(query, topK = 5) {
-    const response = await fetch('http://localhost:8000/query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, top_k: topK })
-    });
-    
-    const data = await response.json();
-    return data.results;
+#### `semantic_search`
+
+Search documentation using semantic similarity.
+
+**Parameters:**
+- `query` (string, required): Search query text
+- `top_k` (integer, optional): Number of results (default: 5, max: 20)
+
+**Example:**
+```python
+result = await client.call_tool(
+    "semantic_search",
+    arguments={"query": "installation steps", "top_k": 10}
+)
+```
+
+### Available MCP Resources
+
+#### `website://docs/metadata`
+
+Get metadata about the indexed documentation.
+
+```python
+metadata = await client.read_resource("website://docs/metadata")
+print(metadata)
+```
+
+#### `website://docs/stats`
+
+Get collection statistics.
+
+```python
+stats = await client.read_resource("website://docs/stats")
+print(stats)
+```
+
+### Testing MCP Protocol
+
+The server communicates via JSON-RPC 2.0. Example messages:
+
+**Initialize request:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "protocolVersion": "2024-11-05",
+    "capabilities": {},
+    "clientInfo": {"name": "test-client", "version": "1.0.0"}
+  }
 }
+```
 
-// Example usage
-const results = await searchDocs('How to deploy?');
-results.forEach((result, i) => {
-    console.log(`${i+1}. ${result.title} (${result.score.toFixed(3)})`);
-    console.log(`   ${result.text.substring(0, 100)}...`);
-});
+**Tools/list request:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/list",
+  "params": {}
+}
+```
+
+**Tools/call request:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "semantic_search",
+    "arguments": {"query": "test", "top_k": 5}
+  }
+}
 ```
 
 ## Integration Examples
 
 ### LLM Integration (RAG Pattern)
 
+Using MCP with an LLM:
+
 ```python
-import requests
-import openai
+from mcp import Client
+import asyncio
 
-def get_context(query: str) -> str:
-    """Get relevant documentation context."""
-    response = requests.post(
-        "http://localhost:8000/query",
-        json={"query": query, "top_k": 3}
-    )
-    results = response.json()['results']
-    
-    # Combine results into context
-    context_parts = []
-    for r in results:
-        context_parts.append(f"From {r['title']}:\n{r['text']}")
-    
-    return "\n\n".join(context_parts)
-
-def answer_with_docs(question: str) -> str:
-    """Answer question using documentation."""
-    # Get relevant context
-    context = get_context(question)
-    
-    # Build prompt
-    prompt = f"""Using the following documentation, answer the question.
+async def answer_with_docs(question: str) -> str:
+    """Answer question using documentation via MCP."""
+    async with Client("website-rag") as client:
+        # Get relevant context using semantic_search tool
+        result = await client.call_tool(
+            "semantic_search",
+            arguments={"query": question, "top_k": 3}
+        )
+        
+        # Combine results into context
+        context_parts = []
+        for r in result['results']:
+            context_parts.append(f"From {r['title']}:\n{r['text']}")
+        
+        context = "\n\n".join(context_parts)
+        
+        # Build prompt for LLM
+        prompt = f"""Using the following documentation, answer the question.
 
 Documentation:
 {context}
@@ -284,42 +345,90 @@ Documentation:
 Question: {question}
 
 Answer:"""
-    
-    # Query LLM
-    response = openai.ChatCompletion.create(
-        model="gpt-4",
-        messages=[{"role": "user", "content": prompt}]
+        
+        # Send to your LLM (OpenAI, Anthropic, etc.)
+        # response = llm.complete(prompt)
+        # return response
+
+# Example usage
+asyncio.run(answer_with_docs("How do I configure authentication?"))
+```
+
+### MCP Server in Custom Application
+
+```python
+import subprocess
+import json
+
+def query_mcp_server(query: str, top_k: int = 5):
+    """Query MCP server via subprocess."""
+    # Start MCP server process
+    process = subprocess.Popen(
+        ["python", "-m", "app.mcp_server"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
     )
     
-    return response.choices[0].message.content
-
-# Use it
-answer = answer_with_docs("How do I configure authentication?")
-print(answer)
+    # Send initialize request
+    init_msg = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "custom-app", "version": "1.0.0"}
+        }
+    }
+    process.stdin.write(json.dumps(init_msg) + "\n")
+    process.stdin.flush()
+    
+    # Send tools/call request
+    call_msg = {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+            "name": "semantic_search",
+            "arguments": {"query": query, "top_k": top_k}
+        }
+    }
+    process.stdin.write(json.dumps(call_msg) + "\n")
+    process.stdin.flush()
+    
+    # Read response
+    response = process.stdout.readline()
+    return json.loads(response)
 ```
 
 ### Chatbot Integration
 
 ```python
+from mcp import Client
+import asyncio
+
 class DocsChatbot:
-    """Chatbot with documentation access."""
+    """Chatbot with documentation access via MCP."""
     
-    def __init__(self, api_url: str = "http://localhost:8000"):
-        self.api_url = api_url
+    def __init__(self, mcp_server: str = "website-rag"):
+        self.mcp_server = mcp_server
         self.conversation_history = []
     
-    def search_docs(self, query: str, top_k: int = 3):
-        """Search documentation."""
-        response = requests.post(
-            f"{self.api_url}/query",
-            json={"query": query, "top_k": top_k}
-        )
-        return response.json()['results']
+    async def search_docs(self, query: str, top_k: int = 3):
+        """Search documentation using MCP."""
+        async with Client(self.mcp_server) as client:
+            result = await client.call_tool(
+                "semantic_search",
+                arguments={"query": query, "top_k": top_k}
+            )
+            return result['results']
     
-    def chat(self, user_message: str) -> str:
+    async def chat(self, user_message: str) -> str:
         """Process user message with doc context."""
         # Search for relevant docs
-        docs = self.search_docs(user_message)
+        docs = await self.search_docs(user_message)
         
         # Build context
         if docs:
@@ -341,25 +450,8 @@ class DocsChatbot:
 
 # Usage
 chatbot = DocsChatbot()
-response = chatbot.chat("How do I get started?")
+response = asyncio.run(chatbot.chat("How do I get started?"))
 print(response)
-```
-
-### API Gateway Integration
-
-Add to your API gateway config (e.g., Kong, Traefik):
-
-```yaml
-# Kong example
-services:
-  - name: docs-search
-    url: http://localhost:8000
-    routes:
-      - name: docs-query
-        paths:
-          - /api/docs/search
-        methods:
-          - POST
 ```
 
 ## Troubleshooting
@@ -372,14 +464,13 @@ docker --version
 docker compose --version
 ```
 
-**Check ports:**
+**Check if Qdrant port is free:**
 ```bash
-# Make sure ports 6333 and 8000 are free
-netstat -tuln | grep -E '6333|8000'
+# Make sure port 6333 is free
+netstat -tuln | grep 6333
 
 # Or on Mac:
 lsof -i :6333
-lsof -i :8000
 ```
 
 **View logs:**
@@ -407,9 +498,17 @@ docker compose logs ingest
 
 ### No Results from Queries
 
-**Check document count:**
-```bash
-curl http://localhost:8000/stats
+**Check document count via MCP:**
+```python
+from mcp import Client
+import asyncio
+
+async def check_stats():
+    async with Client("website-rag") as client:
+        stats = await client.read_resource("website://docs/stats")
+        print(stats)
+
+asyncio.run(check_stats())
 ```
 
 **Verify ingestion completed:**
@@ -417,24 +516,21 @@ curl http://localhost:8000/stats
 docker compose logs ingest | grep "Ingestion complete"
 ```
 
-**Try simpler queries:**
-```bash
-# Instead of very specific query
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "specific technical term"}'
-
-# Try broader query
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "getting started"}'
+**Try simpler queries with MCP client:**
+```python
+# Instead of very specific query, try broader ones
+result = await client.call_tool(
+    "semantic_search",
+    arguments={"query": "getting started", "top_k": 10}
+)
 ```
 
-**Increase top_k:**
-```bash
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "your query", "top_k": 20}'
+**Increase top_k parameter:**
+```python
+result = await client.call_tool(
+    "semantic_search",
+    arguments={"query": "your query", "top_k": 20}
+)
 ```
 
 ### Out of Memory

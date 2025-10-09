@@ -2,7 +2,7 @@
 
 ## Overview
 
-A complete, production-ready Dockerized service for converting documentation websites into a semantic search API using RAG (Retrieval-Augmented Generation). Built specifically to serve as an MCP (Model Context Protocol) data source for LLMs.
+A complete, production-ready Dockerized service for converting documentation websites into a semantic search MCP server using RAG (Retrieval-Augmented Generation). Implements the Model Context Protocol with JSON-RPC 2.0 over stdio, making it compatible with MCP clients like Claude Desktop.
 
 ## What Was Built
 
@@ -32,11 +32,12 @@ A complete, production-ready Dockerized service for converting documentation web
    - Persistent storage
    - Batch upload optimization
 
-5. **FastAPI Server** (`app/api/main.py`)
-   - `/query` - Semantic search endpoint
-   - `/health` - Health check
-   - `/stats` - Service statistics
-   - Fully documented API
+5. **MCP Server** (`app/mcp_server.py`)
+   - Full Model Context Protocol implementation
+   - JSON-RPC 2.0 over stdio transport
+   - `semantic_search` tool for querying documentation
+   - Resources for metadata and statistics
+   - FastMCP framework for clean API
 
 6. **Ingestion Pipeline** (`app/ingest.py`)
    - Orchestrates the full pipeline
@@ -47,7 +48,7 @@ A complete, production-ready Dockerized service for converting documentation web
 
 1. **docker-compose.yml**
    - Qdrant vector database
-   - API service (always running)
+   - MCP server (stdio transport)
    - Ingest service (run on-demand)
    - Persistent volumes
    - Network isolation
@@ -63,18 +64,19 @@ A complete, production-ready Dockerized service for converting documentation web
    - Centralized configuration
    - All aspects configurable
    - Well-documented defaults
+   - MCP server settings
 
-2. **mcp-manifest.json**
-   - MCP-compatible service description
-   - Endpoint specifications
-   - Data format documentation
+2. **mcp-client-config.json**
+   - MCP client configuration
+   - Server command and arguments
+   - Environment variables
 
 ### Documentation (6 comprehensive files)
 
 1. **README.md**
    - Quick start guide
    - Feature overview
-   - API documentation
+   - MCP integration guide
    - Configuration guide
    - Troubleshooting
 
@@ -86,12 +88,12 @@ A complete, production-ready Dockerized service for converting documentation web
 
 3. **USAGE.md**
    - Detailed usage instructions
-   - Integration examples
-   - Code samples (Python, JS)
+   - MCP client integration examples
+   - Code samples (Python with MCP)
    - Troubleshooting guide
 
 4. **EXAMPLES.md**
-   - Query examples
+   - MCP tool usage examples
    - Code integration samples
    - Best practices
 
@@ -111,14 +113,19 @@ A complete, production-ready Dockerized service for converting documentation web
    - Ingestion execution
 
 2. **test.sh**
-   - API endpoint testing
-   - Health checks
-   - Example queries
+   - MCP protocol testing
+   - JSON-RPC message validation
+   - Example tool calls
 
 3. **validate.py**
    - Code validation
    - Configuration checks
-   - Integration tests
+   - MCP protocol tests
+
+4. **test_mcp_protocol.py**
+   - MCP SDK validation
+   - Tool/resource definition tests
+   - JSON-RPC format tests
 
 ## Technical Stack
 
@@ -128,7 +135,8 @@ A complete, production-ready Dockerized service for converting documentation web
 | Chunking | Custom Python | Optimized for documentation |
 | Embeddings | sentence-transformers | Local, no API costs, fast |
 | Vector DB | Qdrant | Fast, Docker-ready, persistent |
-| API | FastAPI | Modern, async, auto-docs |
+| MCP Server | MCP Python SDK | Official implementation, stdio transport |
+| Protocol | JSON-RPC 2.0 | Standard MCP transport |
 | Orchestration | Docker Compose | Simple, reproducible |
 
 ## Key Features
@@ -136,7 +144,7 @@ A complete, production-ready Dockerized service for converting documentation web
 ✅ **Turnkey Solution** - Single command to deploy
 ✅ **Zero API Costs** - Local embeddings
 ✅ **Production Ready** - Error handling, logging, health checks
-✅ **MCP Compatible** - Ready for LLM integration
+✅ **Full MCP Protocol** - JSON-RPC 2.0, tools, resources
 ✅ **Highly Configurable** - All aspects customizable
 ✅ **Well Documented** - 5000+ lines of documentation
 ✅ **Validated** - Syntax checked, logic tested
@@ -147,8 +155,7 @@ A complete, production-ready Dockerized service for converting documentation web
 website-to-mcp/
 ├── app/
 │   ├── api/
-│   │   ├── __init__.py
-│   │   └── main.py              (143 lines) - FastAPI server
+│   │   └── __init__.py
 │   ├── crawler/
 │   │   ├── __init__.py
 │   │   └── web_crawler.py       (185 lines) - Web crawling
@@ -159,11 +166,12 @@ website-to-mcp/
 │   │   ├── __init__.py
 │   │   ├── embedding_service.py (51 lines)  - Embeddings
 │   │   └── vector_store.py      (103 lines) - Vector storage
-│   └── ingest.py                (94 lines)  - Pipeline
+│   ├── ingest.py                (94 lines)  - Pipeline
+│   └── mcp_server.py            (170 lines) - MCP server
 ├── config.yaml                  (38 lines)  - Configuration
 ├── docker-compose.yml           (53 lines)  - Orchestration
 ├── Dockerfile                   (26 lines)  - Container
-├── mcp-manifest.json           (99 lines)  - MCP manifest
+├── mcp-client-config.json       (8 lines)   - MCP client config
 ├── requirements.txt             (16 lines)  - Dependencies
 ├── README.md                    (412 lines) - Main docs
 ├── ARCHITECTURE.md              (394 lines) - Architecture
@@ -173,9 +181,10 @@ website-to-mcp/
 ├── LICENSE                      (21 lines)  - MIT License
 ├── quickstart.sh                (61 lines)  - Quick start
 ├── test.sh                      (67 lines)  - Testing
+├── test_mcp_protocol.py         (180 lines) - Protocol tests
 └── validate.py                  (165 lines) - Validation
 
-Total: 26 files, 864+ lines of code, 2000+ lines of docs
+Total: 26 files, 1000+ lines of code, 2000+ lines of docs
 ```
 
 ## Deliverables Checklist
@@ -202,28 +211,30 @@ All requirements from the issue have been met:
 - [x] Persistent storage
 - [x] Batch processing
 
-### ✅ 4. Retrieval API
-- [x] REST endpoint `/query`
-- [x] Accepts text query
+### ✅ 4. MCP Server
+- [x] JSON-RPC 2.0 over stdio
+- [x] `semantic_search` tool
+- [x] Accepts text query and top_k
 - [x] Converts to embedding
 - [x] Returns top-k similar chunks
-- [x] JSON response with text, source_url, title
-- [x] MCP-ready format
+- [x] JSON response with text, source_url, title, score
+- [x] Resources for metadata and stats
+- [x] Full MCP protocol compliance
 
 ### ✅ 5. Dockerization
 - [x] Single `docker-compose.yml`
 - [x] Web crawler + embedding pipeline
 - [x] Vector DB (Qdrant)
-- [x] API server
+- [x] MCP server with stdio transport
 - [x] Persistent storage
 
 ### ✅ 6. Documentation
 - [x] How to run with `docker compose up -d`
-- [x] Endpoint documentation
-- [x] MCP manifest
+- [x] MCP client integration guide
+- [x] MCP client configuration file
 - [x] How to point at new website URL
 - [x] Architecture documentation
-- [x] Usage examples
+- [x] Usage examples with MCP
 - [x] Troubleshooting guide
 
 ### ✅ 7. Optional Features (Bonus!)
@@ -233,6 +244,7 @@ All requirements from the issue have been met:
 - [x] Validation script
 - [x] Helper scripts
 - [x] Comprehensive documentation
+- [x] Full MCP protocol implementation
 
 ## Usage
 
@@ -252,32 +264,54 @@ vim config.yaml  # Change website.url
 docker compose run --rm ingest
 ```
 
-### Query API
-```bash
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "How do I get started?", "top_k": 5}'
+### Use with MCP Client
+```python
+from mcp import Client
+import asyncio
+
+async def search():
+    async with Client("website-rag") as client:
+        result = await client.call_tool(
+            "semantic_search",
+            arguments={"query": "How do I get started?", "top_k": 5}
+        )
+        print(result)
+
+asyncio.run(search())
 ```
 
 ## Integration Examples
 
-### Python
+### Python with MCP
 ```python
-import requests
+from mcp import Client
+import asyncio
 
-results = requests.post(
-    "http://localhost:8000/query",
-    json={"query": "authentication", "top_k": 5}
-).json()
+async def search_docs():
+    async with Client("website-rag") as client:
+        result = await client.call_tool(
+            "semantic_search",
+            arguments={"query": "authentication", "top_k": 5}
+        )
+        
+        for r in result['results']:
+            print(f"{r['title']}: {r['text'][:100]}...")
 
-for r in results['results']:
-    print(f"{r['title']}: {r['text'][:100]}...")
+asyncio.run(search_docs())
 ```
 
 ### With LLM (RAG Pattern)
 ```python
-# Get context from docs
-context = get_docs_context(user_question)
+# Get context from docs via MCP
+async def get_docs_context(user_question):
+    async with Client("website-rag") as client:
+        result = await client.call_tool(
+            "semantic_search",
+            arguments={"query": user_question, "top_k": 3}
+        )
+        return result['results']
+
+context = asyncio.run(get_docs_context(user_question))
 
 # Send to LLM with context
 prompt = f"Context: {context}\n\nQuestion: {user_question}"

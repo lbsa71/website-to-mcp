@@ -28,13 +28,13 @@ services:
     profiles:
       - ingest
 
-  # API service
-  api:
+  # MCP server service
+  mcp-server:
     build: .
-    container_name: rag-api
-    command: uvicorn app.api.main:app --host 0.0.0.0 --port 8000
-    ports:
-      - "8000:8000"
+    container_name: rag-mcp-server
+    command: python -m app.mcp_server
+    stdin_open: true
+    tty: true
     environment:
       - CONFIG_PATH=/app/config.yaml
     volumes:

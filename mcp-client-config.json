@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "website-rag": {
+      "command": "python",
+      "args": ["-m", "app.mcp_server"],
+      "env": {
+        "CONFIG_PATH": "/app/config.yaml"
+      }
+    }
+  }
+}

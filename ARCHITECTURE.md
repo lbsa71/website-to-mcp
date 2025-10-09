@@ -2,7 +2,7 @@
 
 ## System Overview
 
-The Website RAG MCP Service is a complete pipeline for converting documentation websites into a searchable knowledge base using vector embeddings and semantic search.
+The Website RAG MCP Service is a complete pipeline for converting documentation websites into a searchable knowledge base using vector embeddings and semantic search, exposed via the Model Context Protocol (MCP).
 
 ## Component Architecture
 
@@ -20,11 +20,11 @@ The Website RAG MCP Service is a complete pipeline for converting documentation 
 │         │                     └─────────────┬───────────────┘   │
 │         │                                   │                   │
 │         │                     ┌─────────────▼───────────────┐   │
-│         │                     │       FastAPI Server        │   │
+│         │                     │       MCP Server            │   │
 │         │                     │                              │   │
-│         │                     │  - Query Endpoint (/query)  │   │
-│         │                     │  - Health Check (/health)   │◀──┼─── HTTP Requests
-│         │                     │  - Stats (/stats)           │   │
+│         │                     │  - semantic_search tool     │   │
+│         │                     │  - Resources (metadata)     │   │◀──┼─── JSON-RPC 2.0
+│         │                     │  - JSON-RPC 2.0 / stdio     │   │    (stdio transport)
 │         │                     │  - Embedding Service        │   │
 │         │                     └─────────────────────────────┘   │
 │         │                                                        │
@@ -71,9 +71,10 @@ The Website RAG MCP Service is a complete pipeline for converting documentation 
 ### Query Phase (Real-time)
 
 ```
-1. User Query
-   └─▶ HTTP POST to /query
-   └─▶ Payload: {"query": "...", "top_k": 5}
+1. MCP Client Request
+   └─▶ JSON-RPC 2.0 message via stdio
+   └─▶ Method: "tools/call"
+   └─▶ Params: {"name": "semantic_search", "arguments": {"query": "...", "top_k": 5}}
 
 2. Query Embedding
    └─▶ Input: Query text
@@ -88,12 +89,45 @@ The Website RAG MCP Service is a complete pipeline for converting documentation 
 
 4. Result Formatting
    └─▶ Input: Matched vectors + metadata
-   └─▶ Output: JSON response with text, URLs, scores
-   └─▶ Component: FastAPI endpoint
+   └─▶ Output: Tool result with text, URLs, scores
+   └─▶ Component: MCP Server (semantic_search tool)
 
 5. Response
-   └─▶ JSON array of relevant chunks
-   └─▶ Each with: text, source_url, title, score
+   └─▶ JSON-RPC 2.0 response with result
+   └─▶ Each chunk includes: text, source_url, title, score
+```
+
+## MCP Protocol Flow
+
+```
+Client                          MCP Server                    Vector Store
+  │                                 │                              │
+  │  1. initialize                  │                              │
+  ├─────────────────────────────────▶                              │
+  │  {"jsonrpc": "2.0", ...}        │                              │
+  │                                 │                              │
+  │  2. InitializeResult            │                              │
+  ◀─────────────────────────────────┤                              │
+  │  {"capabilities": {...}}        │                              │
+  │                                 │                              │
+  │  3. tools/list                  │                              │
+  ├─────────────────────────────────▶                              │
+  │                                 │                              │
+  │  4. List of tools               │                              │
+  ◀─────────────────────────────────┤                              │
+  │  [{"name": "semantic_search"}]  │                              │
+  │                                 │                              │
+  │  5. tools/call                  │                              │
+  ├─────────────────────────────────▶                              │
+  │  {"name": "semantic_search",    │  6. Generate embedding       │
+  │   "arguments": {"query": ...}}  ├─────────────────────────────▶│
+  │                                 │                              │
+  │                                 │  7. Search similar vectors   │
+  │                                 ◀──────────────────────────────┤
+  │                                 │                              │
+  │  8. Tool result                 │                              │
+  ◀─────────────────────────────────┤                              │
+  │  {"results": [...]}             │                              │
 ```
 
 ## Module Details
@@ -212,50 +246,46 @@ vector_store:
 - Returns top-K most similar vectors
 - Includes similarity score (0-1)
 
-### 5. FastAPI Server (`app/api/main.py`)
+### 5. MCP Server (`app/mcp_server.py`)
 
-**Purpose**: Expose REST API for querying
+**Purpose**: Expose documentation search via Model Context Protocol
 
-**Endpoints**:
+**Key Features**:
+- Full MCP protocol implementation
+- JSON-RPC 2.0 over stdio transport
+- Tools: `semantic_search`
+- Resources: `website://docs/metadata`, `website://docs/stats`
+- Built with FastMCP framework
 
-#### POST `/query`
-Search for relevant content
-
-Request:
-```json
-{
-  "query": "your question",
-  "top_k": 5  // optional
-}
+**Configuration**:
+```yaml
+mcp:
+  server_name: "website-rag-mcp"
+  capabilities:
+    tools: true
+    resources: true
+    prompts: false
 ```
 
-Response:
-```json
-{
-  "results": [
-    {
-      "text": "...",
-      "source_url": "...",
-      "title": "...",
-      "score": 0.85
-    }
-  ],
-  "query": "your question",
-  "count": 5
-}
-```
+**Available Tools**:
+1. `semantic_search`
+   - Input: `query` (string), `top_k` (integer, optional)
+   - Output: Array of matching chunks with scores
+   - Uses embedding service and vector store internally
 
-#### GET `/health`
-Service health check
+**Available Resources**:
+1. `website://docs/metadata`
+   - Returns: Collection metadata (total chunks, URL, model info)
+   
+2. `website://docs/stats`
+   - Returns: Current statistics (indexed docs, model details)
 
-Response:
-```json
-{
-  "status": "healthy",
-  "vector_store": "connected",
-  "documents_indexed": 1234
-}
-```
+**Protocol**:
+- Transport: stdio (standard input/output)
+- Format: JSON-RPC 2.0
+- Methods: initialize, tools/list, tools/call, resources/list, resources/read
+
+### 6. Ingestion Pipeline (`app/ingest.py`)
 
 #### GET `/stats`
 Service statistics

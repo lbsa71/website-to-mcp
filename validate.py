@@ -84,7 +84,7 @@ def test_config_loading():
         assert 'chunking' in config
         assert 'embedding' in config
         assert 'vector_store' in config
-        assert 'api' in config
+        assert 'mcp' in config
         
         print("✅ Configuration loading tests passed")
         return True
@@ -92,23 +92,34 @@ def test_config_loading():
         print(f"❌ Config test error: {e}")
         return False
 
-def test_mcp_manifest():
-    """Test MCP manifest is valid."""
-    print("\nTesting MCP manifest...")
+def test_mcp_server():
+    """Test MCP server module is valid."""
+    print("\nTesting MCP server module...")
     try:
-        import json
-        with open('mcp-manifest.json', 'r') as f:
-            manifest = json.load(f)
+        import py_compile
+        py_compile.compile('app/mcp_server.py', doraise=True)
         
-        assert 'manifest_version' in manifest
-        assert 'service' in manifest
-        assert 'endpoints' in manifest
-        assert 'query' in manifest['endpoints']
-        
-        print("✅ MCP manifest is valid")
+        print("✅ MCP server module is valid")
         return True
     except Exception as e:
-        print(f"❌ Manifest test error: {e}")
+        print(f"❌ MCP server test error: {e}")
+        return False
+
+def test_mcp_client_config():
+    """Test MCP client configuration is valid."""
+    print("\nTesting MCP client configuration...")
+    try:
+        import json
+        with open('mcp-client-config.json', 'r') as f:
+            config = json.load(f)
+        
+        assert 'mcpServers' in config
+        assert 'website-rag' in config['mcpServers']
+        
+        print("✅ MCP client configuration is valid")
+        return True
+    except Exception as e:
+        print(f"❌ MCP client config test error: {e}")
         return False
 
 def test_docker_compose():
@@ -121,7 +132,7 @@ def test_docker_compose():
         
         assert 'services' in compose
         assert 'qdrant' in compose['services']
-        assert 'api' in compose['services']
+        assert 'mcp-server' in compose['services']
         assert 'ingest' in compose['services']
         
         print("✅ docker-compose.yml is valid")
@@ -141,7 +152,8 @@ def main():
         test_crawler_logic,
         test_chunker_logic,
         test_config_loading,
-        test_mcp_manifest,
+        test_mcp_server,
+        test_mcp_client_config,
         test_docker_compose,
     ]
     
