@@ -24,11 +24,13 @@ vector_store:
   collection_name: "website_docs"
   vector_size: 384
 
-# API settings
-api:
-  host: "0.0.0.0"
-  port: 8000
-  top_k: 5
+# MCP server settings
+mcp:
+  server_name: "website-rag-mcp"
+  capabilities:
+    tools: true
+    resources: true
+    prompts: false
 
 # Crawler settings
 crawler:
